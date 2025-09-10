@@ -1,21 +1,16 @@
 {
     "websites": [
-        "https://google.com",
-        "https://github.com",
-        "https://stackoverflow.com",
-        "https://python.org",
-        "https://sap.com"
+        "https://google.com"
     ],
     "timeout": 10,
-    "output_format": "table",
     "thresholds": {
         "critical": 7,
-        "warning": 30
+        "warning": 400
     },
     "slack_webhook": {
         "enabled": true,
         "url": "https://hooks.slack.com/services/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",
         "send_on_critical": true,
-        "send_on_warning": false
+        "send_on_warning": true
     }
 }

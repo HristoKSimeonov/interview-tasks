@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple test script for certificate checker
+Simple test script for certificate checker with Slack webhook support
 """
 
 import unittest
@@ -13,10 +13,20 @@ from datetime import datetime, timezone, timedelta
 
 class TestCertificateChecker(unittest.TestCase):
     def setUp(self):
-        # Create a temporary config file
+        # Create a temporary config file with Slack webhook config
         self.test_config = {
             "websites": ["https://google.com"],
-            "timeout": 5
+            "timeout": 5,
+            "thresholds": {
+                "critical": 7,
+                "warning": 30
+            },
+            "slack_webhook": {
+                "enabled": True,
+                "url": "https://hooks.slack.com/services/TEST/TEST/TEST",
+                "send_on_critical": True,
+                "send_on_warning": False
+            }
         }
         
         self.temp_config = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
@@ -31,6 +41,31 @@ class TestCertificateChecker(unittest.TestCase):
     def test_load_config(self):
         self.assertEqual(self.checker.config['websites'], ["https://google.com"])
         self.assertEqual(self.checker.config['timeout'], 5)
+    
+    def test_load_thresholds(self):
+        self.assertEqual(self.checker.thresholds['critical'], 7)
+        self.assertEqual(self.checker.thresholds['warning'], 30)
+    
+    def test_determine_status(self):
+        # Test critical status
+        status = self.checker._determine_status(5)
+        self.assertEqual(status, 'CRITICAL')
+        
+        # Test warning status
+        status = self.checker._determine_status(15)
+        self.assertEqual(status, 'WARNING')
+        
+        # Test OK status
+        status = self.checker._determine_status(60)
+        self.assertEqual(status, 'OK')
+        
+        # Test expired status
+        status = self.checker._determine_status(-5)
+        self.assertEqual(status, 'EXPIRED')
+    
+    def test_load_slack_webhook_config(self):
+        self.assertTrue(self.checker.config['slack_webhook']['enabled'])
+        self.assertEqual(self.checker.config['slack_webhook']['url'], "https://hooks.slack.com/services/TEST/TEST/TEST")
     
     def test_parse_url(self):
         hostname, port = self.checker._parse_url("https://example.com:8443")
@@ -89,6 +124,72 @@ class TestCertificateChecker(unittest.TestCase):
                 CertificateChecker(invalid_config.name)
         finally:
             os.unlink(invalid_config.name)
+    
+    @patch('requests.post')
+    def test_send_slack_webhook_alert_success(self, mock_post):
+        # Mock successful webhook response
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_post.return_value = mock_response
+        
+        # Create test results with critical certificate
+        test_results = [
+            {
+                'url': 'https://example.com',
+                'hostname': 'example.com',
+                'status': 'CRITICAL',
+                'expiry_date': '2025-01-15 23:59:59 UTC',
+                'days_until_expiry': 5,
+                'error': None
+            }
+        ]
+        
+        result = self.checker.send_slack_webhook_alert(test_results)
+        
+        self.assertTrue(result)
+        mock_post.assert_called_once()
+        
+        # Verify the payload structure
+        call_args = mock_post.call_args
+        payload = call_args[1]['json']
+        self.assertIn('Certificate Expiry Alert', payload['text'])
+        self.assertEqual(len(payload['attachments']), 2)
+    
+    def test_send_slack_webhook_alert_disabled(self):
+        # Test with webhook disabled
+        config_disabled = {
+            "websites": ["https://google.com"],
+            "slack_webhook": {
+                "enabled": False
+            }
+        }
+        
+        temp_config = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+        json.dump(config_disabled, temp_config)
+        temp_config.close()
+        
+        try:
+            checker = CertificateChecker(temp_config.name)
+            result = checker.send_slack_webhook_alert([])
+            self.assertFalse(result)
+        finally:
+            os.unlink(temp_config.name)
+    
+    def test_send_slack_webhook_alert_no_critical_certs(self):
+        # Test with no critical certificates
+        test_results = [
+            {
+                'url': 'https://example.com',
+                'hostname': 'example.com',
+                'status': 'OK',
+                'expiry_date': '2025-12-15 23:59:59 UTC',
+                'days_until_expiry': 365,
+                'error': None
+            }
+        ]
+        
+        result = self.checker.send_slack_webhook_alert(test_results)
+        self.assertFalse(result)
     
     @patch('main.socket.create_connection')
     @patch('main.ssl.create_default_context')

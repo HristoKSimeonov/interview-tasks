@@ -136,6 +136,7 @@ celerybeat.pid
 
 # Environments
 .env
+*.env
 .envrc
 .venv
 env/
@@ -205,3 +206,14 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Certificate checker specific
+cert_checker/cert_checker.log
+cert_checker/cert_results.json
+cert_checker/cert_checker_full_output.log
+cert_checker/cert_checker_daily_output.log
+cert_checker/logs/
+
+# Cron job logs
+cron_cert_checker*.log
+run_cert_checker*.sh

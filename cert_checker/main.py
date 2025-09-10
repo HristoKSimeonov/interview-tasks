@@ -8,6 +8,8 @@ import json
 import ssl
 import socket
 import sys
+import requests
+import os
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 import logging
@@ -41,6 +43,8 @@ class CertificateChecker:
         self.config = self._load_config(config_file)
         self.results = []
         self.lock = threading.Lock()
+        # Get thresholds from config or use defaults
+        self.thresholds = self.config.get('thresholds', {'critical': 7, 'warning': 30})
     
     def _load_config(self, config_file: str) -> Dict:
         """
@@ -145,6 +149,25 @@ class CertificateChecker:
         delta = expiry_date - now
         return delta.days
     
+    def _determine_status(self, days_until_expiry: int) -> str:
+        """
+        Determine status based on configurable thresholds.
+        
+        Args:
+            days_until_expiry (int): Days until expiry
+            
+        Returns:
+            str: Status (CRITICAL, WARNING, OK, EXPIRED)
+        """
+        if days_until_expiry < 0:
+            return 'EXPIRED'
+        elif days_until_expiry <= self.thresholds['critical']:
+            return 'CRITICAL'
+        elif days_until_expiry <= self.thresholds['warning']:
+            return 'WARNING'
+        else:
+            return 'OK'
+    
     def _check_single_certificate(self, url: str) -> Dict:
         """
         Check certificate for a single URL.
@@ -177,13 +200,8 @@ class CertificateChecker:
             expiry_date = self._parse_certificate_date(cert_info['notAfter'])
             days_until_expiry = self._calculate_days_until_expiry(expiry_date)
             
-            # Determine status
-            if days_until_expiry < 0:
-                status = 'EXPIRED'
-            elif days_until_expiry <= 30:
-                status = 'WARNING'
-            else:
-                status = 'OK'
+            # Determine status using configurable thresholds
+            status = self._determine_status(days_until_expiry)
             
             result = {
                 'url': url,
@@ -194,7 +212,7 @@ class CertificateChecker:
                 'error': None
             }
             
-            logger.info(f"Certificate for {url} expires on {result['expiry_date']} ({days_until_expiry} days)")
+            logger.info(f"Certificate for {url} expires on {result['expiry_date']} ({days_until_expiry} days) - Status: {status}")
             return result
             
         except Exception as e:
@@ -275,20 +293,165 @@ class CertificateChecker:
         print("="*80)
         print(tabulate(table_data, headers=headers, tablefmt='grid'))
         
-        # Display summary
+        # Display summary with configurable thresholds
         total = len(results)
         expired = sum(1 for r in results if r['status'] == 'EXPIRED')
+        critical = sum(1 for r in results if r['status'] == 'CRITICAL')
         warning = sum(1 for r in results if r['status'] == 'WARNING')
         ok = sum(1 for r in results if r['status'] == 'OK')
         errors = sum(1 for r in results if r['status'] == 'ERROR')
         
         print(f"\nSummary:")
         print(f"Total certificates checked: {total}")
-        print(f"OK: {ok}")
-        print(f"Warning (expires within 30 days): {warning}")
-        print(f"Expired: {expired}")
-        print(f"Errors: {errors}")
+        print(f"🟢 OK: {ok}")
+        print(f"🟡 Warning (≤{self.thresholds['warning']} days): {warning}")
+        print(f"🔴 Critical (≤{self.thresholds['critical']} days): {critical}")
+        print(f"❌ Expired: {expired}")
+        print(f"❗ Errors: {errors}")
+        print(f"\nConfigured Thresholds:")
+        print(f"Critical: ≤{self.thresholds['critical']} days")
+        print(f"Warning: ≤{self.thresholds['warning']} days")
         print("="*80)
+    
+    def send_slack_webhook_alert(self, results: List[Dict]) -> bool:
+        """
+        Send Slack webhook alert for critical certificates.
+        
+        Args:
+            results (List[Dict]): Certificate check results
+            
+        Returns:
+            bool: True if webhook sent successfully
+        """
+        webhook_config = self.config.get('slack_webhook', {})
+        
+        if not webhook_config.get('enabled', False):
+            logger.info("Slack webhook alerting is disabled")
+            return False
+        
+        # Check for critical/expired certificates
+        critical_certs = [r for r in results if r['status'] in ['CRITICAL', 'EXPIRED', 'ERROR']]
+        warning_certs = [r for r in results if r['status'] == 'WARNING']
+        
+        # Decide whether to send alert
+        should_send = (
+            (critical_certs and webhook_config.get('send_on_critical', True)) or
+            (warning_certs and webhook_config.get('send_on_warning', False))
+        )
+        
+        if not should_send:
+            logger.info("No alerts to send based on configuration")
+            return False
+        
+        try:
+            webhook_url = webhook_config.get('url')
+            if not webhook_url:
+                logger.error("No Slack webhook URL configured")
+                return False
+            
+            # Determine alert color and emoji based on severity
+            if critical_certs:
+                color = "danger"
+                alert_level = "CRITICAL"
+                emoji = "🚨"
+            elif warning_certs:
+                color = "warning"
+                alert_level = "WARNING"
+                emoji = "⚠️"
+            else:
+                color = "good"
+                alert_level = "INFO"
+                emoji = "ℹ️"
+            
+            # Build the main message
+            main_text = f"{emoji} *Certificate Expiry Alert - {alert_level}*"
+            
+            # Create Slack message payload
+            slack_payload = {
+                "text": main_text,
+                "username": "Certificate Monitor",
+                "icon_emoji": ":shield:",
+                "attachments": [
+                    {
+                        "color": color,
+                        "title": f"Certificate Monitoring Report",
+                        "text": f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}",
+                        "fields": [
+                            {
+                                "title": "Total Certificates Checked",
+                                "value": str(len(results)),
+                                "short": True
+                            },
+                            {
+                                "title": "Critical/Expired",
+                                "value": str(len(critical_certs)),
+                                "short": True
+                            },
+                            {
+                                "title": "Warning",
+                                "value": str(len(warning_certs)),
+                                "short": True
+                            },
+                            {
+                                "title": "Thresholds",
+                                "value": f"Critical: ≤{self.thresholds['critical']} days, Warning: ≤{self.thresholds['warning']} days",
+                                "short": True
+                            }
+                        ],
+                        "footer": "Certificate Monitor",
+                        "footer_icon": "https://slack.com/img/favicon.ico",
+                        "ts": int(datetime.now().timestamp())
+                    }
+                ]
+            }
+            
+            # Add critical certificates details
+            if critical_certs:
+                critical_text = "*CRITICAL/EXPIRED Certificates:*\n"
+                for cert in critical_certs[:10]:
+                    status_emoji = "🔴" if cert['status'] == 'CRITICAL' else "❌" if cert['status'] == 'EXPIRED' else "❗"
+                    critical_text += f"• {status_emoji} *{cert['url']}*: {cert['status']} ({cert['days_until_expiry']} days)\n"
+                
+                if len(critical_certs) > 10:
+                    critical_text += f"\n_... and {len(critical_certs) - 10} more critical certificates_"
+                
+                slack_payload["attachments"].append({
+                    "color": "danger",
+                    "title": "Critical Certificates Details",
+                    "text": critical_text,
+                    "mrkdwn_in": ["text"]
+                })
+            
+            # Add warning certificates details if enabled
+            if warning_certs and webhook_config.get('send_on_warning', False):
+                warning_text = "*WARNING Certificates:*\n"
+                for cert in warning_certs[:5]:
+                    warning_text += f"• 🟡 *{cert['url']}*: {cert['status']} ({cert['days_until_expiry']} days)\n"
+                
+                if len(warning_certs) > 5:
+                    warning_text += f"\n_... and {len(warning_certs) - 5} more warning certificates_"
+                
+                slack_payload["attachments"].append({
+                    "color": "warning", 
+                    "title": "Warning Certificates Details",
+                    "text": warning_text,
+                    "mrkdwn_in": ["text"]
+                })
+            
+            # Send webhook
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post(webhook_url, json=slack_payload, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            logger.info(f"Slack webhook alert sent successfully")
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to send Slack webhook alert: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error sending Slack webhook: {e}")
+            return False
     
     def save_results_to_file(self, results: List[Dict], filename: str = 'cert_results.json') -> None:
         """
@@ -302,6 +465,7 @@ class CertificateChecker:
             output_data = {
                 'timestamp': datetime.now().isoformat(),
                 'total_checked': len(results),
+                'thresholds': self.thresholds,
                 'results': results
             }
             
@@ -329,6 +493,9 @@ def main():
         
         # Save results to file
         checker.save_results_to_file(results)
+
+        # Send Slack webhook alerts if needed
+        checker.send_slack_webhook_alert(results)
         
     except KeyboardInterrupt:
         logger.info("Script interrupted by user")
