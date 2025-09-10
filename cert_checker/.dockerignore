@@ -1,0 +1,13 @@
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.git
+**/.gitignore
+**/README.md
+**/Dockerfile
+**/.dockerignore
+**/cert_results.json
+**/cert_checker.log
+**/.pytest_cache
+**/tests
