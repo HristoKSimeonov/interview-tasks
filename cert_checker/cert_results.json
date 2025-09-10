@@ -1,6 +1,10 @@
 {
-  "timestamp": "2025-09-10T17:53:08.759853",
-  "total_checked": 5,
+  "timestamp": "2025-09-10T21:32:32.434597",
+  "total_checked": 1,
+  "thresholds": {
+    "critical": 7,
+    "warning": 30
+  },
   "results": [
     {
       "url": "https://google.com",
@@ -8,38 +12,6 @@
       "status": "OK",
       "expiry_date": "2025-11-17 08:39:52 UTC",
       "days_until_expiry": 67,
-      "error": null
-    },
-    {
-      "url": "https://stackoverflow.com",
-      "hostname": "stackoverflow.com",
-      "status": "OK",
-      "expiry_date": "2025-11-24 15:58:21 UTC",
-      "days_until_expiry": 75,
-      "error": null
-    },
-    {
-      "url": "https://github.com",
-      "hostname": "github.com",
-      "status": "OK",
-      "expiry_date": "2026-02-05 23:59:59 UTC",
-      "days_until_expiry": 148,
-      "error": null
-    },
-    {
-      "url": "https://python.org",
-      "hostname": "python.org",
-      "status": "OK",
-      "expiry_date": "2026-04-13 12:55:25 UTC",
-      "days_until_expiry": 214,
-      "error": null
-    },
-    {
-      "url": "https://sap.com",
-      "hostname": "sap.com",
-      "status": "OK",
-      "expiry_date": "2026-09-08 23:59:59 UTC",
-      "days_until_expiry": 363,
       "error": null
     }
   ]
