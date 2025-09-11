@@ -144,6 +144,7 @@ tail -f /home/user/cert_checker/cron_cert_checker_docker.log
 
 # View recent runs
 tail -50 /home/user/cert_checker/cron_cert_checker_docker.log
+```
 
 **Application Log:**
 ```bash
@@ -248,3 +249,183 @@ crontab -e
 - **Warning alerts**: Certificates expiring in 8-30 days (if enabled)
 - **Critical alerts**: Certificates expiring in ≤7 days or already expired
 - **Error alerts**: Network issues, DNS failures, SSL errors
+
+---
+
+## Task 2 - Infrastructure Automation Setup
+
+A comprehensive AWS infrastructure automation solution using Terraform that deploys a web application stack.
+
+### Architecture Overview
+
+```
+Internet
+    ↓
+[Application Load Balancer]
+    ↓
+[EC2 Instances (2 AZs)]
+    ↓
+[RDS PostgreSQL Database]
+    ↓
+[AWS Secrets Manager + KMS Encryption]
+```
+
+### Features
+
+- **Multi-AZ High Availability**: Deployment across 2 availability zones
+- **Application Load Balancer**: Internet-facing with health checks
+- **Secure Database**: RDS PostgreSQL with encryption at rest
+- **Secrets Management**: AWS Secrets Manager with KMS encryption
+- **Network Security**: Private subnets, security groups, NAT Gateway
+- **Infrastructure as Code**: 100% Terraform managed
+- **CI/CD Ready**: GitHub Actions workflow
+
+### Prerequisites
+
+- **AWS Account** with appropriate permissions
+- **Terraform** >= 1.0 installed
+- **AWS CLI** configured with credentials
+- **GitHub repository** (for CI/CD)
+
+### Infrastructure Components
+
+#### Network Layer ([`network.tf`](infrastructure-automation/network.tf))
+
+- **VPC**: Custom VPC with DNS support
+- **Subnets**: Public subnets for ALB, private subnets for EC2/RDS
+- **Internet Gateway**: Internet access for public resources
+- **NAT Gateway**: Outbound internet access for private resources
+- **Security Groups**: Layer-4 firewall rules
+  - ALB Security Group: HTTP/HTTPS from internet
+  - Web Security Group: HTTP from ALB, SSH from VPC
+  - Database Security Group: PostgreSQL from web servers only
+
+#### Compute Layer ([`compute.tf`](infrastructure-automation/compute.tf))
+
+- **Launch Template**: EC2 configuration template with user-data
+- **EC2 Instances**: Fixed instances across availability zones
+- **Target Group Attachments**: Connect instances to load balancer
+- **IAM Instance Profile**: Permissions for Secrets Manager access
+
+#### Load Balancer ([`loadbalancer.tf`](infrastructure-automation/loadbalancer.tf))
+
+- **Application Load Balancer**: Internet-facing, multi-AZ
+- **Target Group**: Health checks and traffic routing
+- **Listener Rules**: HTTP traffic forwarding
+- **Health Checks**: Automated instance health monitoring
+
+#### Database Layer ([`database.tf`](infrastructure-automation/database.tf))
+
+- **RDS PostgreSQL**: Managed database service
+- **Subnet Group**: Multi-AZ database placement
+- **Encryption**: Storage encryption at rest
+- **Backup Configuration**: Automated daily backups
+- **Monitoring**: Basic CloudWatch metrics
+
+#### Security & Secrets ([`kms.tf`](infrastructure-automation/kms.tf))
+
+- **KMS Key**: Customer-managed encryption key
+- **Secrets Manager**: Encrypted database credentials storage
+- **IAM Roles**: EC2 access to secrets with least-privilege
+- **Random Password**: Secure database password generation
+
+### Web Application
+
+The deployed web application ([`user-data.sh`](infrastructure-automation/user-data.sh)) features:
+
+#### Technology Stack
+- **Web Server**: Nginx
+- **Runtime**: Amazon Linux 2
+- **Security**: AWS Secrets Manager integration
+- **Monitoring**: Health check endpoints
+
+#### Features
+- **Infrastructure Info**: Displays server details and database status
+- **Health Checks**: JSON endpoint for load balancer monitoring
+- **Security**: Database credentials via Secrets Manager
+- **Logging**: Comprehensive setup and deployment logs
+
+#### Endpoints
+```bash
+# Main application
+http://your-alb-dns-name/
+
+# Health check
+http://your-alb-dns-name/health
+```
+
+### CI/CD Pipeline
+
+#### GitHub Actions Workflow ([`.github/workflows/terraform-infra.yml`](.github/workflows/terraform-infra.yml))
+
+**Features:**
+- **Manual Triggers**: Workflow dispatch with options
+- **Plan/Apply/Destroy**: Flexible deployment actions
+- **AWS Integration**: Secure credential management
+- **Validation**: Terraform format and validation checks
+- **Output Display**: Infrastructure endpoints and credentials
+
+**Usage:**
+
+1. **Configure GitHub Secrets:**
+```
+AWS_ACCESS_KEY_ID     = your-aws-access-key
+AWS_SECRET_ACCESS_KEY = your-aws-secret-key
+```
+
+2. **Trigger Deployment:**
+   - Go to Actions tab in GitHub
+   - Select "Infrastructure Deployment"
+   - Click "Run workflow"
+   - Choose action (plan/apply) and run
+
+3. **Monitor Progress:**
+   - View real-time logs in GitHub Actions
+   - Check outputs for application URLs
+   - Monitor AWS resources in console
+
+### Security Best Practices
+
+#### Network Security
+- **Private Subnets**: EC2 instances not directly accessible from internet
+- **Security Groups**: Principle of least privilege with layer-4 firewall rules
+- **NAT Gateway**: Secure outbound internet access for private instances
+- **VPC Isolation**: Custom VPC with controlled network boundaries
+
+#### Data Protection
+- **Encryption at Rest**: RDS and Secrets Manager encrypted with KMS
+- **Encryption in Transit**: TLS for all communications
+- **Secrets Management**: No hardcoded credentials
+- **IAM Roles**: Instance profiles with minimal permissions
+
+#### Operational Security
+- **SSH Access**: Limited to VPC CIDR block (10.0.0.0/16) via security groups
+- **IAM Roles**: EC2 instances use IAM roles for Secrets Manager access
+- **Backup**: Automated RDS backups (7-day retention)
+- **Monitoring**: Basic CloudWatch metrics for RDS and EC2
+- **No Hardcoded Credentials**: Database credentials stored in AWS Secrets Manager
+
+### Monitoring and Troubleshooting
+
+#### Infrastructure Monitoring
+
+**Application Health:**
+```bash
+# Check application status
+curl -s http://$(terraform output -raw load_balancer_dns_name)/health | jq '.'
+
+# Monitor load balancer targets
+aws elbv2 describe-target-health --target-group-arn $(terraform output -raw target_group_arn)
+```
+
+**Database Connectivity:**
+```bash
+# Test database connection
+aws rds describe-db-instances --db-instance-identifier $(terraform output -raw database_identifier)
+```
+
+**Secrets Access:**
+```bash
+# Verify secrets manager
+aws secretsmanager get-secret-value --secret-id $(terraform output -raw db_secret_arn)
+```

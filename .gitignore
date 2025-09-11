@@ -217,3 +217,30 @@ cert_checker/logs/
 # Cron job logs
 cron_cert_checker*.log
 run_cert_checker*.sh
+
+# Terraform files
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+.terraform/
+.terraform.lock.hcl
+terraform.tfplan
+tfplan
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Backup files
+*.backup
+*.bak

@@ -1,0 +1,88 @@
+name: Infrastructure Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      destroy:
+        description: 'Destroy the infrastructure'
+        required: false
+        default: false
+        type: boolean
+      action:
+        description: 'Terraform action'
+        required: false
+        default: 'apply'
+        type: choice
+        options:
+        - plan
+        - apply
+
+run-name: "Infrastructure ${{ inputs.destroy == 'true' && 'destroy' || inputs.action }} by ${{ github.actor }}"
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: eu-central-1
+      WORKING_DIRECTORY: infrastructure-automation
+      TF_VERSION: 1.6.0
+
+    steps:
+    - name: Set build description
+      run: |
+        echo "Infrastructure action: ${{ inputs.destroy == 'true' && 'destroy' || inputs.action }}"
+        echo "Triggered by: ${{ github.actor }}"
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Initialize Terraform
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: terraform init
+
+    - name: Validate Terraform
+      if: inputs.destroy != 'true'
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: terraform validate
+
+    - name: Format Check
+      if: inputs.destroy != 'true'
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: terraform fmt -check
+      continue-on-error: true
+
+    - name: Plan Terraform
+      if: inputs.destroy != 'true'
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: terraform plan -out=tfplan
+
+    - name: Apply Terraform
+      if: inputs.destroy != 'true' && inputs.action == 'apply'
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: terraform apply -auto-approve tfplan
+
+    - name: Destroy Terraform
+      if: inputs.destroy == 'true'
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: terraform destroy -auto-approve
+
+    - name: Output results
+      if: inputs.destroy != 'true' && inputs.action == 'apply'
+      working-directory: ${{ env.WORKING_DIRECTORY }}
+      run: |
+        echo "Application URL: $(terraform output -raw application_url)"
+        echo "Load Balancer DNS: $(terraform output -raw load_balancer_dns_name)"
+        echo "Secret ARN: $(terraform output -raw db_secret_arn)"
