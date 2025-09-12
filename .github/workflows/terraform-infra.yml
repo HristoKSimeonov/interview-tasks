@@ -1,6 +1,12 @@
 name: Infrastructure Deployment
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infrastructure-automation/**'
+      - '.github/workflows/terraform-infra.yml' 
   workflow_dispatch:
     inputs:
       destroy:
@@ -17,7 +23,7 @@ on:
         - plan
         - apply
 
-run-name: "Infrastructure ${{ inputs.destroy == 'true' && 'destroy' || inputs.action }} by ${{ github.actor }}"
+run-name: "Infrastructure ${{ inputs.destroy == 'true' && 'destroy' || (github.event_name == 'workflow_dispatch' && inputs.action) || 'apply' }} by ${{ github.actor }}"
 
 jobs:
   terraform:
@@ -65,7 +71,7 @@ jobs:
       run: terraform plan -out=tfplan
 
     - name: Apply Terraform
-      if: inputs.destroy != 'true' && inputs.action == 'apply'
+      if: inputs.destroy != 'true' && (inputs.action == 'apply' || github.event_name == 'push')
       working-directory: ${{ env.WORKING_DIRECTORY }}
       run: terraform apply -auto-approve tfplan
 
