@@ -34,24 +34,6 @@ variable "instance_type" {
   default     = "t2.micro"
 }
 
-variable "min_size" {
-  description = "Minimum number of instances in ASG"
-  type        = number
-  default     = 1
-}
-
-variable "max_size" {
-  description = "Maximum number of instances in ASG"
-  type        = number
-  default     = 2
-}
-
-variable "desired_capacity" {
-  description = "Desired number of instances in ASG"
-  type        = number
-  default     = 1
-}
-
 variable "db_instance_class" {
   description = "RDS instance class"
   type        = string
