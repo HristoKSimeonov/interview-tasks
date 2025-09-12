@@ -29,11 +29,6 @@ jobs:
       TF_VERSION: 1.6.0
 
     steps:
-    - name: Set build description
-      run: |
-        echo "Infrastructure action: ${{ inputs.destroy == 'true' && 'destroy' || inputs.action }}"
-        echo "Triggered by: ${{ github.actor }}"
-
     - name: Checkout repository
       uses: actions/checkout@v4
 
