@@ -6,9 +6,14 @@ exec 2>&1
 
 echo "=== User Data Script Started at $(date) ==="
 
-# Update and install packages
+# Update system first
 yum update -y
-yum install -y aws-cli nginx awslogs
+
+# Install nginx using Amazon Linux Extras
+amazon-linux-extras install -y nginx1
+
+# Install other packages
+yum install -y aws-cli awslogs
 
 # Configure CloudWatch Logs Agent
 cat > /etc/awslogs/awslogs.conf << EOF
@@ -47,12 +52,12 @@ sed -i "s/region = us-east-1/region = ${aws_region}/g" /etc/awslogs/awscli.conf
 systemctl start awslogsd
 systemctl enable awslogsd
 
-# Create web content
+# Create web content directory
 mkdir -p /usr/share/nginx/html
 
 # Get instance metadata
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null)
-INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.metadata/latest/meta-data/instance-id 2>/dev/null)
+INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null)
 AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone 2>/dev/null)
 
 # Create HTML page
@@ -159,11 +164,14 @@ EOF
 
 # Set ownership and start nginx
 chown -R nginx:nginx /usr/share/nginx/html
+
+# Start and enable nginx
 systemctl start nginx
 systemctl enable nginx
 
-# Log completion with CloudWatch agent status
+# Log completion with status
 echo "CloudWatch Logs agent status: $(systemctl is-active awslogsd)"
 echo "Nginx status: $(systemctl is-active nginx)"
+echo "Nginx listening on: $(netstat -tlnp | grep :80)"
 
 echo "=== User Data Script Completed at $(date) ==="
