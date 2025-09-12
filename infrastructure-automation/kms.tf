@@ -103,10 +103,48 @@ resource "aws_iam_policy" "db_secret_access" {
   }
 }
 
-# Attach the secret access policy to the role
+# IAM policy for EC2 instances to write logs to CloudWatch
+resource "aws_iam_policy" "cloudwatch_logs" {
+  name        = "${var.project_name}-${var.environment}-cloudwatch-logs"
+  description = "Policy to allow EC2 instances to write to CloudWatch Logs"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams"
+        ]
+        Resource = "arn:aws:logs:${var.aws_region}:*:*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-cloudwatch-logs-policy"
+  }
+}
+
+# Attach the secret access policy to the EC2role
 resource "aws_iam_role_policy_attachment" "ec2_secret_access" {
   role       = aws_iam_role.ec2_secret_access_role.name
   policy_arn = aws_iam_policy.db_secret_access.arn
+}
+
+# Attach CloudWatch Logs policy to EC2 role
+resource "aws_iam_role_policy_attachment" "ec2_cloudwatch_logs" {
+  role       = aws_iam_role.ec2_secret_access_role.name
+  policy_arn = aws_iam_policy.cloudwatch_logs.arn
+}
+
+# Attach AmazonSSMManagedInstanceCore policy to EC2 role for SSM access
+resource "aws_iam_role_policy_attachment" "ec2_ssm_managed_instance_core" {
+  role       = aws_iam_role.ec2_secret_access_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
 # Instance profile for EC2 instances
