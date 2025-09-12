@@ -18,12 +18,13 @@ TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null)
 AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone 2>/dev/null)
 
-# Create HTML page
+# Create simple HTML page with proper encoding
 cat > /usr/share/nginx/html/index.html << 'EOF'
 <!DOCTYPE html>
 <html>
 <head>
     <title>Web Stack Test</title>
+    <meta charset="UTF-8">
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; }
         .box { border: 1px solid #ccc; padding: 20px; margin: 10px 0; }
@@ -47,7 +48,7 @@ cat > /usr/share/nginx/html/index.html << 'EOF'
     </div>
     
     <p>Deployed: DEPLOY_TIME_PLACEHOLDER</p>
-    <p>Architecture: Load Balancer -> EC2 -> Database (via Secrets Manager)</p>
+    <p>Architecture: Load Balancer -&gt; EC2 -&gt; Database (via Secrets Manager)</p>
 </body>
 </html>
 EOF
@@ -67,7 +68,7 @@ cat > /usr/share/nginx/html/health.json << EOF
 }
 EOF
 
-# Nginx config
+# Nginx config with proper charset
 cat > /etc/nginx/nginx.conf << 'EOF'
 user nginx;
 worker_processes auto;
@@ -81,6 +82,7 @@ events {
 http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
+    charset utf-8;
     
     server {
         listen 80;
@@ -92,12 +94,12 @@ http {
         }
 
         location /health {
-            add_header Content-Type application/json;
+            add_header Content-Type "application/json; charset=utf-8";
             try_files /health.json =404;
         }
 
         location /ping {
-            add_header Content-Type text/plain;
+            add_header Content-Type "text/plain; charset=utf-8";
             return 200 "pong\n";
         }
     }
