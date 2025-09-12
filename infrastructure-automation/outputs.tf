@@ -118,3 +118,17 @@ output "kms_key_arn" {
   value       = aws_kms_key.db_secret_key.arn
   sensitive   = true
 }
+
+# =============================================================================
+# CLOUDWATCH OUTPUTS
+# =============================================================================
+
+output "cloudwatch_log_group_name" {
+  description = "Name of the CloudWatch log group for EC2 instances"
+  value       = aws_cloudwatch_log_group.ec2_logs.name
+}
+
+output "cloudwatch_log_group_arn" {
+  description = "ARN of the CloudWatch log group for EC2 instances"
+  value       = aws_cloudwatch_log_group.ec2_logs.arn
+}

@@ -117,9 +117,15 @@ resource "aws_iam_policy" "cloudwatch_logs" {
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents",
-          "logs:DescribeLogStreams"
+          "logs:DescribeLogStreams",
+          "logs:DescribeLogGroups"
         ]
-        Resource = "arn:aws:logs:${var.aws_region}:*:*"
+        Resource = [
+          aws_cloudwatch_log_group.ec2_logs.arn,
+          "${aws_cloudwatch_log_group.ec2_logs.arn}:*",
+          aws_cloudwatch_log_group.user_data_logs.arn,
+          "${aws_cloudwatch_log_group.user_data_logs.arn}:*"
+        ]
       }
     ]
   })

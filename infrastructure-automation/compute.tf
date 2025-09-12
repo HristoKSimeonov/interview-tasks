@@ -14,11 +14,13 @@ resource "aws_launch_template" "web" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user-data.sh", {
-    secret_arn  = aws_secretsmanager_secret.db_credentials.arn
-    aws_region  = var.aws_region
-    db_endpoint = aws_db_instance.main.endpoint
-    db_name     = var.db_name
-    db_username = var.db_username
+    secret_arn    = aws_secretsmanager_secret.db_credentials.arn
+    aws_region    = var.aws_region
+    db_endpoint   = aws_db_instance.main.endpoint
+    db_name       = var.db_name
+    db_username   = var.db_username
+    project_name  = var.project_name
+    environment   = var.environment
   }))
 
   tag_specifications {
@@ -55,4 +57,24 @@ resource "aws_lb_target_group_attachment" "web" {
   target_group_arn = aws_lb_target_group.web.arn
   target_id        = aws_instance.web[count.index].id
   port             = 80
+}
+
+# CloudWatch Log Group for EC2 instances
+resource "aws_cloudwatch_log_group" "ec2_logs" {
+  name              = "/aws/ec2/${var.project_name}-${var.environment}"
+  retention_in_days = 7
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-ec2-logs"
+  }
+}
+
+# CloudWatch Log Group for user-data script logs
+resource "aws_cloudwatch_log_group" "user_data_logs" {
+  name              = "/aws/ec2/${var.project_name}-${var.environment}/user-data"
+  retention_in_days = 7
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-user-data-logs"
+  }
 }
