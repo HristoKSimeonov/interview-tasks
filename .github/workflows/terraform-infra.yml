@@ -87,7 +87,6 @@ jobs:
         echo "=== INFRASTRUCTURE OUTPUTS ==="
         echo "Application URL: $(terraform output -raw application_url)"
         echo "Load Balancer DNS: $(terraform output -raw load_balancer_dns_name)"
-        echo "Web Instance IDs: $(terraform output -json web_instance_ids | jq -r '.[]')"
         echo "Database Endpoint: $(terraform output -raw database_endpoint)"
         echo "Secret ARN: $(terraform output -raw db_secret_arn)"
         echo "=========================="
