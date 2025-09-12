@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Enhanced user data script with proper nginx installation
+# Enhanced user data script with proper nginx installation for Amazon Linux 2
 exec > >(tee /var/log/user-data.log)
 exec 2>&1
 
@@ -14,14 +14,39 @@ yum update -y
 echo "Installing basic packages..."
 yum install -y aws-cli jq
 
-# Install nginx using Amazon Linux Extras
+# Install nginx using Amazon Linux Extras (proper method)
 echo "Installing nginx via Amazon Linux Extras..."
-amazon-linux-extras install nginx1 -y
+amazon-linux-extras install -y nginx1
 
-# Ensure nginx directories exist
+# Alternative installation if amazon-linux-extras fails
+if ! command -v nginx &> /dev/null; then
+    echo "Amazon Linux Extras nginx installation failed, trying alternative method..."
+    amazon-linux-extras enable nginx1
+    yum clean metadata
+    yum install -y nginx
+fi
+
+# Verify nginx is installed
+if ! command -v nginx &> /dev/null; then
+    echo "ERROR: nginx installation failed completely"
+    exit 1
+fi
+
+echo "nginx successfully installed"
+
+# Ensure nginx directories exist and have correct permissions
+echo "Setting up nginx directories..."
 mkdir -p /usr/share/nginx/html
-mkdir -p /etc/nginx
+mkdir -p /etc/nginx/conf.d
 mkdir -p /var/log/nginx
+mkdir -p /var/lib/nginx
+mkdir -p /var/cache/nginx
+
+# Set correct ownership
+chown -R nginx:nginx /usr/share/nginx/html
+chown -R nginx:nginx /var/log/nginx
+chown -R nginx:nginx /var/lib/nginx
+chown -R nginx:nginx /var/cache/nginx
 
 # Test AWS CLI access
 echo "Testing AWS CLI access..."
@@ -119,10 +144,12 @@ cat > /usr/share/nginx/html/index.html << EOF
 </html>
 EOF
 
+# Set correct ownership for web content
+chown nginx:nginx /usr/share/nginx/html/index.html
+
 # Create health check endpoint
 echo "Creating health check endpoint..."
-mkdir -p /usr/share/nginx/html/health
-cat > /usr/share/nginx/html/health/index.html << EOF
+cat > /usr/share/nginx/html/health.json << EOF
 {
   "status": "healthy",
   "timestamp": "$(date -Iseconds)",
@@ -131,28 +158,52 @@ cat > /usr/share/nginx/html/health/index.html << EOF
 }
 EOF
 
-# Create nginx configuration
+chown nginx:nginx /usr/share/nginx/html/health.json
+
+# Create nginx configuration (backup original first)
 echo "Configuring nginx..."
+cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.backup 2>/dev/null || true
+
 cat > /etc/nginx/nginx.conf << 'EOF'
 user nginx;
 worker_processes auto;
 error_log /var/log/nginx/error.log;
 pid /run/nginx.pid;
 
+# Load dynamic modules
+include /usr/share/nginx/modules/*.conf;
+
 events {
     worker_connections 1024;
 }
 
 http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-    
-    access_log /var/log/nginx/access.log;
-    
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile            on;
+    tcp_nopush          on;
+    tcp_nodelay         on;
+    keepalive_timeout   65;
+    types_hash_max_size 2048;
+
+    include             /etc/nginx/mime.types;
+    default_type        application/octet-stream;
+
+    # Include additional configuration files
+    include /etc/nginx/conf.d/*.conf;
+
     server {
-        listen 80;
-        root /usr/share/nginx/html;
-        index index.html;
+        listen       80 default_server;
+        listen       [::]:80 default_server;
+        server_name  _;
+        root         /usr/share/nginx/html;
+
+        # Load configuration files for the default server block.
+        include /etc/nginx/default.d/*.conf;
 
         location / {
             try_files $uri $uri/ =404;
@@ -160,7 +211,19 @@ http {
 
         location /health {
             add_header Content-Type application/json;
-            try_files $uri $uri/ =404;
+            try_files /health.json =404;
+        }
+
+        # Simple health check endpoint
+        location /ping {
+            add_header Content-Type text/plain;
+            return 200 "pong\n";
+        }
+
+        error_page   404              /404.html;
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   /usr/share/nginx/html;
         }
     }
 }
@@ -170,10 +233,26 @@ EOF
 echo "Testing nginx configuration..."
 nginx -t
 
+if [ $? -ne 0 ]; then
+    echo "ERROR: nginx configuration test failed"
+    cat /etc/nginx/nginx.conf
+    exit 1
+fi
+
+echo "nginx configuration test passed"
+
 # Start and enable nginx
 echo "Starting nginx..."
 systemctl start nginx
-systemctl enable nginx
+
+if [ $? -eq 0 ]; then
+    echo "nginx started successfully"
+    systemctl enable nginx
+else
+    echo "ERROR: Failed to start nginx"
+    systemctl status nginx --no-pager
+    exit 1
+fi
 
 # Check nginx status
 echo "Checking nginx status..."
@@ -181,7 +260,14 @@ systemctl status nginx --no-pager
 
 # Test local connectivity
 echo "Testing local connectivity..."
-curl -I http://localhost/
-curl -s http://localhost/health
+curl -I http://localhost/ || echo "Health check on / failed"
+curl -s http://localhost/health || echo "Health check on /health failed"
+curl -s http://localhost/ping || echo "Health check on /ping failed"
+
+# Ensure SSM agent is running (it should be by default on Amazon Linux 2)
+echo "Checking SSM agent status..."
+systemctl status amazon-ssm-agent --no-pager
+systemctl start amazon-ssm-agent 2>/dev/null || echo "SSM agent already running or failed to start"
+systemctl enable amazon-ssm-agent
 
 echo "=== User Data Script Completed Successfully at $(date) ==="
