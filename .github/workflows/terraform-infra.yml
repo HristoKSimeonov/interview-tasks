@@ -9,11 +9,6 @@ on:
       - '.github/workflows/terraform-infra.yml' 
   workflow_dispatch:
     inputs:
-      destroy:
-        description: 'Destroy the infrastructure'
-        required: false
-        default: false
-        type: boolean
       action:
         description: 'Terraform action'
         required: false
@@ -22,8 +17,9 @@ on:
         options:
         - plan
         - apply
+        - destroy
 
-run-name: "Infrastructure ${{ inputs.destroy == 'true' && 'destroy' || (github.event_name == 'workflow_dispatch' && inputs.action) || 'apply' }} by ${{ github.actor }}"
+run-name: "Infrastructure ${{ inputs.action || 'apply' }} by ${{ github.actor }}"
 
 jobs:
   terraform:
@@ -55,33 +51,33 @@ jobs:
       run: terraform init
 
     - name: Validate Terraform
-      if: inputs.destroy != 'true'
+      if: inputs.action != 'destroy'
       working-directory: ${{ env.WORKING_DIRECTORY }}
       run: terraform validate
 
     - name: Format Check
-      if: inputs.destroy != 'true'
+      if: inputs.action != 'destroy'
       working-directory: ${{ env.WORKING_DIRECTORY }}
       run: terraform fmt -check
       continue-on-error: true
 
     - name: Plan Terraform
-      if: inputs.destroy != 'true'
+      if: inputs.action != 'destroy'
       working-directory: ${{ env.WORKING_DIRECTORY }}
       run: terraform plan -out=tfplan
 
     - name: Apply Terraform
-      if: inputs.destroy != 'true' && (inputs.action == 'apply' || github.event_name == 'push')
+      if: inputs.action == 'apply' || github.event_name == 'push'
       working-directory: ${{ env.WORKING_DIRECTORY }}
       run: terraform apply -auto-approve tfplan
 
     - name: Destroy Terraform
-      if: inputs.destroy == 'true'
+      if: inputs.action == 'destroy'
       working-directory: ${{ env.WORKING_DIRECTORY }}
       run: terraform destroy -auto-approve
 
     - name: Output results
-      if: inputs.destroy != 'true' && (inputs.action == 'apply' || github.event_name == 'push')
+      if: inputs.action == 'apply' || github.event_name == 'push'
       working-directory: ${{ env.WORKING_DIRECTORY }}
       run: |
         echo "=== INFRASTRUCTURE OUTPUTS ==="
