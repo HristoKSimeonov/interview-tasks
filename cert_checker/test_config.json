@@ -4,7 +4,7 @@
     ],
     "timeout": 10,
     "thresholds": {
-        "critical": 7,
+        "critical": 365,
         "warning": 400
     },
     "slack_webhook": {
