@@ -11,7 +11,7 @@ resource "aws_kms_key" "db_secret_key" {
 
 # KMS Key Alias
 resource "aws_kms_alias" "db_secret_key_alias" {
-  name          = "alias/${var.project_name}-${var.environment}-db-secret-${random_id.secret_suffix.hex}"
+  name          = "alias/${var.project_name}-${var.environment}-db-secret-v2"
   target_key_id = aws_kms_key.db_secret_key.key_id
 }
 
@@ -22,11 +22,6 @@ resource "random_password" "db_master_password" {
   override_special = "!#$%&*+-=?^_`{|}~"
 }
 
-# Generate random suffix for secret name
-resource "random_id" "secret_suffix" {
-  byte_length = 4
-}
-
 # Secrets Manager Secret
 resource "aws_secretsmanager_secret" "db_credentials" {
   name                    = "${var.project_name}-${var.environment}-db-credentials"
@@ -35,7 +30,7 @@ resource "aws_secretsmanager_secret" "db_credentials" {
   recovery_window_in_days = 7
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-db-credentials-${random_id.secret_suffix.hex}"
+    Name = "${var.project_name}-${var.environment}-db-credentials-v2"
   }
 }
 
