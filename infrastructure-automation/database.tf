@@ -10,7 +10,7 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
-# Simplified RDS Instance (PostgreSQL)
+# RDS Instance (PostgreSQL)
 resource "aws_db_instance" "main" {
   identifier = "${var.project_name}-${var.environment}-postgres"
 
