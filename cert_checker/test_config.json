@@ -9,7 +9,7 @@
     },
     "slack_webhook": {
         "enabled": true,
-        "url": "https://hooks.slack.com/services/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",
+        "url": "https://hooks.slack.com/services/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",
         "send_on_critical": true,
         "send_on_warning": true
     }
