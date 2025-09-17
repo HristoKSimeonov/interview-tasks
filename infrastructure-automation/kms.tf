@@ -21,7 +21,7 @@ resource "random_password" "db_master_password" {
   special          = true
   override_special = "!#$%&*+-=?^_`{|}~"
 }
-
+####
 # Generate random suffix for secret name
 resource "random_id" "secret_suffix" {
   byte_length = 4
